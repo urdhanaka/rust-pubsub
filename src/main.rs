@@ -4,8 +4,9 @@ mod broker;
 mod messages;
 mod publisher;
 mod subscriber;
+mod utils;
 
-use crate::{publisher::Publisher, subscriber::Subscriber};
+use crate::{broker::Broker, publisher::Publisher, subscriber::Subscriber};
 use clap::Parser;
 
 #[derive(Parser, Debug)]
@@ -24,18 +25,20 @@ fn main() {
     let args = Args::parse();
 
     if args.role == "subscriber" {
-        let mut subs = Subscriber { topic: args.topic };
+        let subs = Subscriber::new(args.topic);
 
-        subs.check_topic();
-        subs.change_topic("newMessageService");
-        subs.check_topic();
+        subs.check_me();
     } else if args.role == "publisher" {
+        let topic = "messageService";
+
         let pubs = Publisher {
-            topic: args.topic,
-            messages: "Hello, World!".to_string(),
+            topic: topic.to_string(),
         };
 
-        pubs.check_topic();
-        pubs.check_message();
+        pubs.send_message(format!("Hello, {}", topic));
+    } else {
+        let broker = Broker::new();
+
+        broker.run();
     }
 }

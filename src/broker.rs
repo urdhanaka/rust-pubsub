@@ -1,37 +1,96 @@
 use crate::subscriber::Subscriber;
-use std::{collections::HashMap, sync::Mutex};
+use anyhow::Result;
+use log::{error, info};
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
+};
+use tokio::{
+    io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
+    net::{TcpListener, TcpStream},
+};
 
-struct Broker {
-    /// Mutex for read/write
-    lock: Mutex<bool>,
-
-    /// Map of topics and the subscriber list
-    topics: HashMap<String, Vec<Subscriber>>,
+pub struct Broker {
+    /// Map of topics and the subscriber's connection list
+    topics: Arc<Mutex<HashMap<String, Vec<Subscriber>>>>,
 }
 
 impl Broker {
+    pub fn new() -> Self {
+        let topics = Arc::new(Mutex::new(HashMap::new()));
+
+        Self { topics }
+    }
+
     /// Add new topic
     pub fn new_topic(&mut self, topic: String) {
-        // check if topic is already present
-        if self.topics.contains_key(&topic) {
+        // clone first
+        let arc_clone = Arc::clone(&self.topics);
+        let mut topic_map = arc_clone.lock().unwrap();
+
+        // return early if topic already exist
+        if topic_map.contains_key(&topic) {
+            info!("Topic {} already exists", topic);
             return;
         }
 
-        let curr_lock = self.lock.try_lock();
-        if curr_lock.is_err() {
-            println!("Could not get mutex lock: {}", curr_lock.err().unwrap())
-        }
-
-        self.topics.insert(topic, Vec::new());
+        topic_map.insert(topic, Vec::new());
     }
 
     /// Add subscriber to a topic that exists
     pub fn add_subscriber_to_topic(&mut self, topic: String, subs: Subscriber) {
-        if !self.topics.contains_key(&topic) {
-            println!("Topic is not available");
+        // clone first
+        let arc_clone = Arc::clone(&self.topics);
+        let mut topic_map = arc_clone.lock().unwrap();
+
+        // return early if topic doesn't exist
+        if !topic_map.contains_key(&topic) {
+            error!("Topic is not available");
             return;
         }
 
-        self.topics.get_mut(&topic).unwrap().push(subs);
+        let topic_vec = topic_map.get_mut(&topic).unwrap();
+        topic_vec.push(subs)
+    }
+
+    #[tokio::main]
+    pub async fn run(&self) -> Result<()> {
+        let listener = TcpListener::bind("127.0.0.1:8080").await?;
+
+        info!("Broker is running on port :8080");
+
+        loop {
+            let (stream, addr) = listener.accept().await?;
+
+            // tokio::spawn(async move {})
+        }
+    }
+
+    async fn handle_client(stream: TcpStream) -> Result<()> {
+        let (reader, writer) = stream.into_split();
+        let mut reader = BufReader::new(reader);
+        let mut writer = writer;
+        let mut line = String::new();
+
+        loop {
+            line.clear();
+            let bytes_read = reader.read_line(&mut line).await?;
+
+            if bytes_read == 0 {
+                break;
+            }
+
+            let parts: Vec<&str> = line.trim().splitn(3, ' ').collect();
+
+            match parts.as_slice() {
+                ["SUBSCRIBE", topic] => {}
+
+                ["PUBLISHER", topic, message] => {}
+
+                _ => writer.write_all(b"Unknown command\n").await?,
+            }
+        }
+
+        Ok(())
     }
 }
