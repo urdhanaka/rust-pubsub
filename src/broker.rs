@@ -3,6 +3,7 @@ use anyhow::Result;
 use log::{error, info};
 use std::{
     collections::HashMap,
+    net::SocketAddr,
     sync::{Arc, Mutex},
 };
 use tokio::{
@@ -16,10 +17,10 @@ pub struct Broker {
 }
 
 impl Broker {
-    pub fn new() -> Self {
+    pub fn new() -> &'static Self {
         let topics = Arc::new(Mutex::new(HashMap::new()));
 
-        Self { topics }
+        &Self { topics }
     }
 
     /// Add new topic
@@ -56,17 +57,20 @@ impl Broker {
     #[tokio::main]
     pub async fn run(&self) -> Result<()> {
         let listener = TcpListener::bind("127.0.0.1:8080").await?;
-
         info!("Broker is running on port :8080");
 
         loop {
             let (stream, addr) = listener.accept().await?;
 
-            // tokio::spawn(async move {})
+            tokio::spawn(async move {
+                if let Err(e) = self.handle_client(stream, addr).await {
+                    error!("Client error: {}", e)
+                }
+            });
         }
     }
 
-    async fn handle_client(stream: TcpStream) -> Result<()> {
+    async fn handle_client(&self, stream: TcpStream, addr: SocketAddr) -> Result<()> {
         let (reader, writer) = stream.into_split();
         let mut reader = BufReader::new(reader);
         let mut writer = writer;
@@ -83,9 +87,16 @@ impl Broker {
             let parts: Vec<&str> = line.trim().splitn(3, ' ').collect();
 
             match parts.as_slice() {
-                ["SUBSCRIBE", topic] => {}
+                ["SUBSCRIBE", topic] => {
+                    info!("Getting subscriber for {} topic, conn: {:?}", topic, addr)
+                }
 
-                ["PUBLISHER", topic, message] => {}
+                ["PUBLISHER", topic, message] => {
+                    info!(
+                        "Getting publisher for {} topic, conn: {:?}, message: {}",
+                        topic, addr, message
+                    )
+                }
 
                 _ => writer.write_all(b"Unknown command\n").await?,
             }
