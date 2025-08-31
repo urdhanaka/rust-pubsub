@@ -2,19 +2,18 @@ use crate::utils;
 
 pub struct Subscriber {
     /// Unique ID for subscriber
-    pub id: String,
+    id: String,
 
     /// Topic subscribed
-    pub topic: String,
+    topic: String,
 
     /// Connection
-    pub conn: String,
+    conn: String,
 }
 
 impl Subscriber {
-    pub fn new(topic: String) -> Self {
+    pub fn new(topic: String, conn: String) -> Self {
         let id = utils::random_string(10);
-        let conn = "asdlasd".to_string();
 
         Self { id, topic, conn }
     }

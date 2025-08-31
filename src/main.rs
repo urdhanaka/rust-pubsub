@@ -8,7 +8,7 @@ mod utils;
 
 use crate::{broker::Broker, publisher::Publisher, subscriber::Subscriber};
 use clap::Parser;
-use log::error;
+use log::{error, info};
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
@@ -31,21 +31,20 @@ fn main() {
         .init();
 
     if args.role == "subscriber" {
-        let _subs = Subscriber::new(args.topic.unwrap());
+        let _subs = Subscriber::new(args.topic.unwrap(), "".to_string());
 
         // subs.check_me();
     } else if args.role == "publisher" {
-        let topic = "messageService";
+        let pubs = Publisher::new(args.topic.as_ref().unwrap().to_string(), "".to_string());
 
-        let pubs = Publisher {
-            topic: topic.to_string(),
-        };
-
-        pubs.send_message(format!("Hello, {}", topic));
+        pubs.send_message(format!("Hello, {}", args.topic.as_ref().unwrap()));
     } else if args.role == "broker" {
         let broker = Broker::new();
 
-        let _ = broker.run();
+        // let _ = broker.run();
+        broker
+            .run()
+            .unwrap_or_else(|e| error!("Error occured: {:?}", e));
     } else {
         error!("Role {} is not available", args.role)
     }

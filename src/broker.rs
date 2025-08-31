@@ -3,6 +3,7 @@ use anyhow::Result;
 use log::{error, info};
 use std::{
     collections::HashMap,
+    error::Error,
     net::SocketAddr,
     sync::{Arc, Mutex},
 };
@@ -17,10 +18,10 @@ pub struct Broker {
 }
 
 impl Broker {
-    pub fn new() -> &'static Self {
+    pub fn new() -> Self {
         let topics = Arc::new(Mutex::new(HashMap::new()));
 
-        &Self { topics }
+        Self { topics }
     }
 
     /// Add new topic
@@ -55,53 +56,55 @@ impl Broker {
     }
 
     #[tokio::main]
-    pub async fn run(&self) -> Result<()> {
-        let listener = TcpListener::bind("127.0.0.1:8080").await?;
+    pub async fn run(&self) -> Result<(), String> {
+        let listener = TcpListener::bind("127.0.0.1:8080").await;
         info!("Broker is running on port :8080");
 
-        loop {
-            let (stream, addr) = listener.accept().await?;
+        Err("Broker run error".to_string())
 
-            tokio::spawn(async move {
-                if let Err(e) = self.handle_client(stream, addr).await {
-                    error!("Client error: {}", e)
-                }
-            });
+        // loop {
+        //     let (stream, addr) = listener.accept().await?;
+        //
+        //     tokio::spawn(async move {
+        //         if let Err(e) = handle_client(stream, addr).await {
+        //             error!("Client error: {}", e)
+        //         }
+        //     });
+        // }
+    }
+}
+
+async fn handle_client(stream: TcpStream, addr: SocketAddr) -> Result<()> {
+    let (reader, writer) = stream.into_split();
+    let mut reader = BufReader::new(reader);
+    let mut writer = writer;
+    let mut line = String::new();
+
+    loop {
+        line.clear();
+        let bytes_read = reader.read_line(&mut line).await?;
+
+        if bytes_read == 0 {
+            break;
+        }
+
+        let parts: Vec<&str> = line.trim().splitn(3, ' ').collect();
+
+        match parts.as_slice() {
+            ["SUBSCRIBE", topic] => {
+                info!("Getting subscriber for {} topic, conn: {:?}", topic, addr)
+            }
+
+            ["PUBLISHER", topic, message] => {
+                info!(
+                    "Getting publisher for {} topic, conn: {:?}, message: {}",
+                    topic, addr, message
+                )
+            }
+
+            _ => writer.write_all(b"Unknown command\n").await?,
         }
     }
 
-    async fn handle_client(&self, stream: TcpStream, addr: SocketAddr) -> Result<()> {
-        let (reader, writer) = stream.into_split();
-        let mut reader = BufReader::new(reader);
-        let mut writer = writer;
-        let mut line = String::new();
-
-        loop {
-            line.clear();
-            let bytes_read = reader.read_line(&mut line).await?;
-
-            if bytes_read == 0 {
-                break;
-            }
-
-            let parts: Vec<&str> = line.trim().splitn(3, ' ').collect();
-
-            match parts.as_slice() {
-                ["SUBSCRIBE", topic] => {
-                    info!("Getting subscriber for {} topic, conn: {:?}", topic, addr)
-                }
-
-                ["PUBLISHER", topic, message] => {
-                    info!(
-                        "Getting publisher for {} topic, conn: {:?}, message: {}",
-                        topic, addr, message
-                    )
-                }
-
-                _ => writer.write_all(b"Unknown command\n").await?,
-            }
-        }
-
-        Ok(())
-    }
+    Ok(())
 }
