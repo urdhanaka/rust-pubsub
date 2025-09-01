@@ -56,21 +56,19 @@ impl Broker {
     }
 
     #[tokio::main]
-    pub async fn run(&self) -> Result<(), String> {
-        let listener = TcpListener::bind("127.0.0.1:8080").await;
+    pub async fn run(&self) -> Result<()> {
+        let listener = TcpListener::bind("127.0.0.1:8080").await?;
         info!("Broker is running on port :8080");
 
-        Err("Broker run error".to_string())
+        loop {
+            let (stream, addr) = listener.accept().await?;
 
-        // loop {
-        //     let (stream, addr) = listener.accept().await?;
-        //
-        //     tokio::spawn(async move {
-        //         if let Err(e) = handle_client(stream, addr).await {
-        //             error!("Client error: {}", e)
-        //         }
-        //     });
-        // }
+            tokio::spawn(async move {
+                if let Err(e) = handle_client(stream, addr).await {
+                    error!("Client error: {}", e)
+                }
+            });
+        }
     }
 }
 
